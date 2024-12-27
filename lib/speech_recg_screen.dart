@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -10,23 +12,24 @@ class SpeechRecgScreen extends StatefulWidget {
 }
 
 class _SpeechRecgScreenState extends State<SpeechRecgScreen> {
-  final stt.SpeechToText speech = stt.SpeechToText();
+  late stt.SpeechToText speech;
+  //= stt.SpeechToText();
   bool isListening = false;
   String text = "Start Talking";
   double confidence = 1.0;
 
   @override
   void initState() {
-    // TODO: implement initState
     super.initState();
     initSpeech();
+    speech = stt.SpeechToText();
   }
 
   void initSpeech() async {
     await Permission.microphone.request();
     speech.initialize(
       onError: (errorNotification) => print('Error - ${errorNotification}'),
-      onStatus: (status) => print("Status - ${status}"),
+      onStatus: (status) => print("Status - $status"),
     );
   }
 
@@ -34,7 +37,14 @@ class _SpeechRecgScreenState extends State<SpeechRecgScreen> {
     if (!isListening) {
       bool available = await speech.initialize(
         onError: (errorNotification) => print('error'),
-        onStatus: (status) => print('status'),
+        onStatus: (status) {
+          print('Speech engine status: $status');
+          if (status == "done" || status == "notListening") {
+            setState(() {
+              isListening = false;
+            });
+          }
+        },
       );
 
       if (available) {
@@ -43,13 +53,17 @@ class _SpeechRecgScreenState extends State<SpeechRecgScreen> {
         });
 
         speech.listen(
-          onResult: (result) => setState(() {
-            text = result.recognizedWords;
-            if (result.hasConfidenceRating && result.confidence > 0) {
-              confidence = result.confidence;
-            }
-          }),
-        );
+            onResult: (result) => setState(() {
+                  text = result.recognizedWords;
+                  if (result.hasConfidenceRating && result.confidence > 0) {
+                    confidence = result.confidence;
+                  }
+                }),
+            pauseFor: const Duration(seconds: 5),
+            listenOptions:
+                stt.SpeechListenOptions(listenMode: stt.ListenMode.dictation)
+            //listenMode: stt.ListenMode.dictation,
+            );
       } else {
         setState(() {
           isListening = false;
@@ -59,11 +73,35 @@ class _SpeechRecgScreenState extends State<SpeechRecgScreen> {
     }
   }
 
+  Future<void> startNewSession() async {
+    await speech.stop(); // stoping existing session
+    setState(() {
+      text = "Press the Button and start speaking";
+      isListening = false;
+    });
+    listen(); //start new one
+  }
+
+  void stopAndReset() {
+    speech.stop();
+    setState(() {
+      text = "Recording stopped";
+      isListening = false;
+    });
+  }
+
+  void handleError(String error) {
+    setState(() {
+      text = "Error occurred: $error. Please try again.";
+      isListening = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return  Scaffold(
+    return Scaffold(
       appBar: AppBar(
-        title: Text('Speech to Text'),
+        title: const Text('Speech to Text'),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton(
@@ -85,6 +123,5 @@ class _SpeechRecgScreenState extends State<SpeechRecgScreen> {
         ),
       ),
     );
-  
   }
 }
